@@ -36,15 +36,18 @@ void destruir_fila_csv(fila_csv_t* fila, bool debe_destruir) {
 	free(fila);
 }
 
-fila_csv_t* parsear_linea_csv(char* linea, size_t columnas) {
+fila_csv_t* parsear_linea_csv(char* linea, size_t columnas, bool espacios) {
 	fila_csv_t* output = crear_fila_csv(columnas);
 	if (!output) return NULL;
 	char* primero = linea;
 	char* ultimo = linea;
 	size_t columna_actual = 0;
+	char separador = ',';
+	if(espacios) separador = ' ';
+
 	while (columna_actual < columnas && debe_continuar(primero)) {
 		ultimo++;
-		if ((*ultimo != ',') && (*ultimo != ' ') && (*ultimo) && (*ultimo != '\n')) {
+		if ((*ultimo != separador) && (*ultimo) && (*ultimo != '\n')) {
 			continue;
 		}
 		size_t largo = ((size_t)(ultimo - primero)) + 1;

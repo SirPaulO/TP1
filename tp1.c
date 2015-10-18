@@ -97,15 +97,15 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
 	while(linea)
 	{
 	    // TODO: si fila es NULL?
-		fila_csv_t* fila = parsear_linea_csv(linea, PUESTOS_A_VOTAR);
+		fila_csv_t* fila = parsear_linea_csv(linea, PUESTOS_A_VOTAR, false);
 
 		lista_t* lista_candidatos = lista_crear();
 		if(!lista_candidatos)
         { /* TODO: si falla? */ }
 
         // TODO: Si devuelve false en algun insertar?
-        for(int i=0;i<PUESTOS_A_VOTAR;i++)
-            lista_insertar_ultimo(lista_candidatos, obtener_columna(fila, i))
+        for(size_t i=0;i<PUESTOS_A_VOTAR;i++)
+            lista_insertar_ultimo(lista_candidatos, obtener_columna(fila, i));
 
         // TODO: Si devuelve false al insertar?
         lista_insertar_ultimo(maquina->listas, lista_candidatos);
@@ -144,7 +144,7 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
 	while(linea)
 	{
 	    // TODO: si fila es NULL?
-		fila_csv_t* fila = parsear_linea_csv(linea, cantidad_Columnas);
+		fila_csv_t* fila = parsear_linea_csv(linea, cantidad_Columnas, false);
 
         votante_t* votante = malloc(sizeof(votante_t));
 		if(!votante)
@@ -215,7 +215,7 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
 
     votante_t* votante = malloc(sizeof(votante_t));
 
-    if(!votante) return error_manager(OTRO);
+    if(!votante) { error_manager(OTRO); return false; }
 
     votante->documento_numero = documento_numero;
     votante->documento_tipo = documento_tipo;
@@ -240,7 +240,7 @@ bool comando_votar_inicio(maquina_votacion_t* maquina){
     if(cola_esta_vacia(maquina->cola))  { error_manager(NO_VOTANTES);   return false; }
 
     votante_t* votante_espera = cola_desencolar(maquina->cola);
-    if(!votante) { error_manager(OTRO); return false; }
+    if(!votante_espera) { error_manager(OTRO); return false; }
 
     bool enpadronado = hash_pertenece(maquina->padron, votante_espera->documento_numero);
     if(!enpadronado)
@@ -271,6 +271,7 @@ bool comando_votar_inicio(maquina_votacion_t* maquina){
     maquina->votando_cargo = 1;
 
     // TODO: Mostrar menu de votacion
+    return true;
 }
 
 /*
@@ -327,7 +328,7 @@ void leer_entrada(maquina_votacion_t* maquina) {
             continue;
         }
 
-        fila_csv_t* fila = parsear_linea_csv(linea, columnas);
+        fila_csv_t* fila = parsear_linea_csv(linea, columnas, true);
 
         cmd_ingresado = obtener_columna(fila, 0);
         cmd_param1    = obtener_columna(fila, 1);
@@ -344,7 +345,7 @@ void leer_entrada(maquina_votacion_t* maquina) {
             if(!cmd_param1) continue;
 
             if( strcmp(cmd_param1,"inicio")== 0 )
-                comando_votar_inicio();
+                comando_votar_inicio(maquina);
 
             else if( strcmp(cmd_param1,"deshacer")== 0 )
                 comando_votar_deshacer();

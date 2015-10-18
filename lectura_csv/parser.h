@@ -14,8 +14,7 @@ typedef struct fila fila_csv_t;
 		- columnas: cantidad de columnas a leer de la línea
 	output:
 		- un puntero a una estructura fila_csv_t con las columnas parseadas o NULL en caso de fallo */
-fila_csv_t* parsear_linea_csv(char* linea, size_t columnas);
-//fila_csv_t* parsear_linea_csv(char* linea, size_t* columnas, char separador);
+fila_csv_t* parsear_linea_csv(char* linea, size_t columnas, bool espacios);
 
 /* obtiene el valor de una columna del csv
 	input:
