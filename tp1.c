@@ -13,11 +13,13 @@
 #include "tda/vector_dinamico.h"
 
 #define VECTOR_TAM_INICIAL 50
-#define PUESTOS_A_VOTAR 5 // Cantidad de puestos a votar + 2 (Por ID y Nombre de la lista)
+#define CARGOS_A_VOTAR 5 // Cantidad de puestos a votar + 2 (Por ID y Nombre de la lista)
 
-#define PRESIDENTE 1
-#define GOBERNADOR 2
-#define INTENDENTE 3
+typedef enum {
+    PRESIDENTE,
+    GOBERNADOR,
+    INTENDENTE
+} cargo;
 
 /* Struct para almacenar los votantes en el padron y la cola */
 typedef struct votante {
@@ -27,16 +29,16 @@ typedef struct votante {
 } votante_t;
 
 /* Struct para almacenar los votos que reciba un determinado partido politico */
-typedef struct partido_politico
-{
+typedef struct partido_politico {
+    char* idPartido;
     char* nombre_partido;
     char* presidente;
     char* gobernador;
     char* intendente;
-    int votos_presidente = 0;
-    int votos_gobernador = 0;
-    int votos_intendente = 0;
-};
+    size_t votos_presidente;
+    size_t votos_gobernador;
+    size_t votos_intendente;
+} partido_politico_t;
 
 /* Codigos de error escritos user-friendly*/
 typedef enum {
@@ -75,10 +77,14 @@ typedef struct maquina_votacion{
     pila_t* ciclo;
     // Cargo que se esta votando actualmente (de estar votandose)
     int votando_cargo;
+    size_t cantidad_partidos;
 } maquina_votacion_t;
 
+/****** PROTOS ******/
+void mostrar_menu_votacion(maquina_votacion_t*);
+
 /* Imprime codigo de error */
-void error_manager(error_code code) {
+bool error_manager(error_code code) {
     /*
     ERROR1: si hubo un error en la lectura de los archivos (o archivos inexistentes).
     ERROR2: si la mesa ya estaba previamente abierta
@@ -93,6 +99,7 @@ void error_manager(error_code code) {
     ERROR11: En caso de que aún queden votantes ingresados sin emitir su voto
     */
     printf("ERROR%d\n", code+1);
+    return false;
 }
 
 /*
@@ -101,52 +108,66 @@ void error_manager(error_code code) {
  Post: Devuelve false en caso de no haber modificado maquina->listas.
 */
 bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
-    // TODO: Cerrar archivo antes de devolver False en algun error
+
+    lista_t* lista_candidatos = lista_crear();
+    if(!lista_candidatos)
+        return error_manager(OTRO);
+
     FILE* f = fopen(listas,"r");
 	if(!f)
     {
-        error_manager(LECTURA);
-        fclose(listas);
-        return false;
+        
+        fclose(f);
+        return error_manager(LECTURA);
     }
 
 	char* linea = leer_linea(f);
+    // Saltear primer linea.
+    linea = leer_linea(f);
+    size_t cantidad_partidos = 0;
+
 	while(linea)
 	{
-	    // TODO: si fila es NULL?
-		fila_csv_t* fila = parsear_linea_csv(linea, PUESTOS_A_VOTAR, false);
+        cantidad_partidos++;
+        partido_politico_t* partido = malloc(sizeof(partido_politico_t));
+		fila_csv_t* fila = parsear_linea_csv(linea, CARGOS_A_VOTAR, false);
 
-		lista_t* lista_candidatos = lista_crear();
-		if(!lista_candidatos)
-        { /* TODO: si falla? */ 
+        if(!fila || !partido)
+        {
+            if(!partido) free(fila);
+            else free(partido);
 
+            lista_destruir(lista_candidatos, free);
+            free(linea);
+            return error_manager(OTRO);
         }
 
-        // TODO: Si devuelve false en algun insertar?
-        for(size_t i=0;i<PUESTOS_A_VOTAR;i++)
-            bool insertar = lista_insertar_ultimo(lista_candidatos, obtener_columna(fila, i));
-            if(!insertar)
-            {
-                error_manager(OTRO);
-                return false;
+        partido->idPartido = obtener_columna(fila, 0);
+        partido->nombre_partido = obtener_columna(fila, 1);
+        partido->presidente = obtener_columna(fila, 2);
+        partido->gobernador = obtener_columna(fila, 3);
+        partido->intendente = obtener_columna(fila, 4);
+        partido->votos_presidente = 0;
+        partido->votos_gobernador = 0;
+        partido->votos_intendente = 0;
 
-            }
-
-        // TODO: Si devuelve false al insertar?
-        bool insertar_maquina = lista_insertar_ultimo(maquina->listas, lista_candidatos);
-        if(!insertar_maquina)
+        bool insertar = lista_insertar_ultimo(lista_candidatos, partido);
+        if(!insertar)
         {
-
+            fclose(f);
+            free(partido);
+            lista_destruir(lista_candidatos, free);
+            return error_manager(OTRO);
         }
 
         destruir_fila_csv(fila, true);
-        lista_candidatos = NULL;
-        linea = NULL;
+        free(linea);
 
         // Leer proxima linea
         linea = leer_linea(f);
 	}
-	free(linea);
+    maquina->listas = lista_candidatos;
+    maquina->cantidad_partidos = cantidad_partidos;
 	fclose(f);
 
 	return true;
@@ -160,11 +181,7 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
 bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
     // TODO: Cerrar archivo antes de devolver False en algun error
     FILE* f = fopen(padron,"r");
-	if(!f)
-    {
-        error_manager(LECTURA);
-        return false;
-    }
+	if(!f) return error_manager(LECTURA);
 
 	char* linea = leer_linea(f);
 
@@ -177,7 +194,12 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
 
         votante_t* votante = malloc(sizeof(votante_t));
 		if(!votante)
-        { /* TODO: si falla? */ }
+        {
+            free(fila);
+            free(linea);
+            fclose(f);
+            return error_manager(OTRO);
+        }
 
         char* documento_tipo = obtener_columna(fila, 0);
         char* documento_numero = obtener_columna(fila, 1);
@@ -186,17 +208,23 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
         votante->documento_tipo = documento_tipo;
         votante->voto_realizado = false;
 
-        // TODO: Fallo al guardar
-        hash_guardar(maquina->padron,documento_numero, votante);
+        bool guardado = hash_guardar(maquina->padron,documento_numero, votante);
+        if(!guardado)
+        {
+            free(fila);
+            free(linea);
+            fclose(f);
+            hash_destruir(maquina->padron);
+            return error_manager(OTRO);
+        }
 
         destruir_fila_csv(fila, true);
         votante = NULL;
-        linea = NULL;
+        free(linea);
 
         // Leer proxima linea
         linea = leer_linea(f);
 	}
-	free(linea);
 	fclose(f);
 
 	return true;
@@ -209,21 +237,21 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
 */
 bool comando_abrir(maquina_votacion_t* maquina, char* listas, char* padron) {
     if(!listas || !padron)
-    {
-        error_manager(LECTURA);
-        return false;
-    }
+        return error_manager(LECTURA);
 
     if(maquina->estado >= ABIERTA)
-    {
-        error_manager(MESA_ABIERTA);
-        return false;
-    }
+        return error_manager(MESA_ABIERTA);
 
-    // TODO: Si falla al crear lista.
     maquina->listas = lista_crear();
-    // TODO: Si falla al crear lista.
+    if(!maquina->listas)
+        return error_manager(OTRO);
+
     maquina->padron = hash_crear(free);
+    if(!maquina->padron)
+    {
+        lista_destruir(maquina->listas, free);
+        return error_manager(OTRO);
+    }
 
     cargar_listas(maquina, listas);
     cargar_padron(maquina, padron);
@@ -238,13 +266,13 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
     printf("Comando ingresar ejecutado: %s , %s \n", documento_tipo, documento_numero);
 
     // Error handling
-    if(maquina->estado == CERRADA)              { error_manager(MESA_CERRADA);      return false; }
-    if(!documento_tipo || !documento_numero)    { error_manager(OTRO);              return false; }
-    if(strtol(documento_numero, NULL, 10) < 0)  { error_manager(NUMERO_NEGATIVO);   return false; }
+    if(maquina->estado == CERRADA)              { return error_manager(MESA_CERRADA); }
+    if(!documento_tipo || !documento_numero)    { return error_manager(OTRO); }
+    if(strtol(documento_numero, NULL, 10) < 0)  { return error_manager(NUMERO_NEGATIVO); }
 
     votante_t* votante = malloc(sizeof(votante_t));
 
-    if(!votante) { error_manager(OTRO); return false; }
+    if(!votante) {  return error_manager(OTRO); }
 
     votante->documento_numero = documento_numero;
     votante->documento_tipo = documento_tipo;
@@ -252,8 +280,7 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
     if( cola_encolar(maquina->cola, votante) )
         return true;
 
-    error_manager(OTRO);
-    return false;
+    return error_manager(OTRO);
 }
 
 /*
@@ -261,102 +288,164 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
  Crear pila para ciclo de votacion actual
 */
 bool comando_votar_inicio(maquina_votacion_t* maquina){
-    printf("Comando votar inicio ejecutado \n");
-
     // Error handling
-    if(maquina->estado == CERRADA)      { error_manager(MESA_CERRADA);  return false; }
-    if(maquina->estado == VOTACION)     { error_manager(OTRO);          return false; }
-    if(cola_esta_vacia(maquina->cola))  { error_manager(NO_VOTANTES);   return false; }
+    if(maquina->estado == CERRADA)      { return error_manager(MESA_CERRADA); }
+    if(maquina->estado == VOTACION)     { return error_manager(OTRO); }
+    if(cola_esta_vacia(maquina->cola))  { return error_manager(NO_VOTANTES); }
 
     votante_t* votante_espera = cola_desencolar(maquina->cola);
-    if(!votante_espera) { error_manager(OTRO); return false; }
+    if(!votante_espera) { return error_manager(OTRO); }
 
     bool enpadronado = hash_pertenece(maquina->padron, votante_espera->documento_numero);
     if(!enpadronado)
     {
-            error_manager(NO_ENPADRONADO);
             free(votante_espera);
-            return false;
+            return error_manager(NO_ENPADRONADO);
     }
 
     votante_t* votante_padron = hash_obtener(maquina->padron, votante_espera->documento_numero);
 
     if(votante_padron->voto_realizado)
     {
-        error_manager(VOTO_REALIZADO);
         free(votante_espera);
-        return false;
+        free(votante_padron);
+        return error_manager(VOTO_REALIZADO);
     }
 
     pila_t* ciclo = pila_crear();
     if(!ciclo)
-    {
-        error_manager(OTRO);
-        return false;
-    }
+        return error_manager(OTRO);
 
     maquina->estado = VOTACION;
     maquina->ciclo = ciclo;
-    maquina->votando_cargo = 1;
+    maquina->votando_cargo = 0;
 
-    // TODO: Mostrar menu de votacion
+    mostrar_menu_votacion(maquina);
     return true;
 }
 
-/*
-void mostrar_menu_votacion()
-{
+/* Formatear y mostrar menu de votacion */
+void mostrar_menu_votacion(maquina_votacion_t* maquina) {
+    /*
+    Cargo: Presidente
+    1: Frente para la Derrota: Alan Información
+    */
+
+    lista_iter_t* iter = lista_iter_crear(maquina->listas);
+    if(!iter) { error_manager(OTRO); return; }
+
     switch(maquina->votando_cargo)
     {
-        case PRESIDENTE:
-            printf("cargo presidente:\n", );
-            printf("1. %s\n", lista->partido->presidente );          TODO::: GONCHIMP   
-                                    lista avanzar!
-            printf("2. %s\n", );
-            printf("3. %s\n", );
-            break;
-
-        case GOBERNADOR:
-            printf("cargo gobernador:\n", );
-
-            break;
-        case INTENDENTE:
-            printf("cargo gobernador:\n", );
-
-            break;
-
+        case PRESIDENTE: printf("Cargo: Presidente\n"); break;
+        case GOBERNADOR: printf("Cargo: Gobernador\n"); break;
+        case INTENDENTE: printf("Cargo: Intendente\n"); break;
     }
+
+    while(!lista_iter_al_final(iter))
+    {
+        partido_politico_t* partido = lista_iter_ver_actual(iter);
+        if(!partido) { error_manager(OTRO); free(iter); return; }
+
+        switch(maquina->votando_cargo)
+        {
+            case PRESIDENTE:
+                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->presidente);
+                break;
+            case GOBERNADOR:
+                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->gobernador);
+                break;
+            case INTENDENTE:
+                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->intendente);
+                break;
+        }
+    } 
 }
-*/
 
 /*
  Almacenar en la pila de votacion el partido votado.
  Validar que exista ciclo de votacion.
 */
-void comando_votar_idPartido(char* id) {
+bool comando_votar_idPartido(maquina_votacion_t* maquina, char* id) {
     printf("Comando votar idPartido ejecutado \n");
+    if(maquina->estado < VOTACION || (maquina->votando_cargo > INTENDENTE) )
+        return error_manager(OTRO);
+
+    long int idPartido = strtol(id, NULL, 10);
+
+    if(idPartido < 1 || idPartido > maquina->cantidad_partidos)
+    { error_manager(OTRO); return false; }
+    
+    pila_apilar(maquina->ciclo, id);
+    maquina->votando_cargo++;
+
+    if(maquina->votando_cargo < INTENDENTE)
+        mostrar_menu_votacion(maquina);
+
+    return true;
+}
+
+/* Cerrar ciclo de votacion y procesar resultados */
+bool comando_votar_fin(maquina_votacion_t* maquina) {
+    printf("Comando votar fin ejecutado \n");
+
+    if(maquina->estado < VOTACION)
+        return error_manager(OTRO);
+
+    if(maquina->votando_cargo < INTENDENTE)
+        return error_manager(FALTA_VOTAR);
+
+    while(!pila_esta_vacia(maquina->ciclo))
+    {
+        char* id = pila_desapilar(maquina->ciclo);
+        // TODO if(!id)
+
+        lista_iter_t* iter = lista_iter_crear(maquina->listas);
+        if(!iter) { error_manager(OTRO); return false; }
+
+        while(!lista_iter_al_final(iter))
+        {
+            partido_politico_t* partido = lista_iter_ver_actual(iter);
+            if(!partido) { error_manager(OTRO); free(iter); return false; }
+
+            if(strcmp(partido->idPartido, id) == 0)
+            {
+                switch(maquina->votando_cargo)
+                {
+                    case PRESIDENTE: partido->presidente++; break;
+                    case GOBERNADOR: partido->gobernador++; break;
+                    case INTENDENTE: partido->intendente++; break;
+                } 
+            }
+        }
+        maquina->votando_cargo--;
+    }
+
+    maquina->votando_cargo = 0;
+    return true;
 }
 
 /* Retroceder la pila de votacion */
-void comando_votar_deshacer() {
+bool comando_votar_deshacer(maquina_votacion_t* maquina) {
     printf("Comando votar deshacer ejecutado \n");
-}
+    if(maquina->estado < VOTACION)
+        return error_manager(OTRO);
 
+    if(maquina->votando_cargo == PRESIDENTE)
+        return error_manager(NO_DESHACER);
 
-/* Cerrar ciclo de votacion y procesar resultados */
-void comando_votar_fin() {
-    printf("Comando votar fin ejecutado \n");
+    maquina->votando_cargo--;
+    pila_desapilar(maquina->ciclo);
+
+    if(maquina->votando_cargo < INTENDENTE)
+        mostrar_menu_votacion(maquina);
+
+    return true;
 }
 
 /* Procesar todos los votos y volcal resultados */
-void comando_cerrar() {
+void comando_cerrar(maquina_votacion_t* maquina) {
     printf("Comando cerrar ejecutado \n");
 }
-
-/* Formatear y mostrar menu de votacion */
-void mostrar_listado(maquina_votacion_t* maquina) {
-}
-
 
 /* Leer entrada e intentar formatear comandos */
 void leer_entrada(maquina_votacion_t* maquina) {
@@ -389,12 +478,14 @@ void leer_entrada(maquina_votacion_t* maquina) {
         cmd_param1    = obtener_columna(fila, 1);
         cmd_param2    = obtener_columna(fila, 2);
 
-        if( strcmp(cmd_ingresado, cmd_abrir)==0 )
-            comando_abrir(maquina, cmd_param1, cmd_param2);
-
-        else if( strcmp(cmd_ingresado, cmd_ingresar)==0 )
-            comando_ingresar(maquina, cmd_param1, cmd_param2);
-
+        if( strcmp(cmd_ingresado, cmd_abrir)==0 ) {
+            if( comando_abrir(maquina, cmd_param1, cmd_param2) )
+                printf("OK\n");
+        }
+        else if( strcmp(cmd_ingresado, cmd_ingresar)==0 ) {
+            if( comando_ingresar(maquina, cmd_param1, cmd_param2) )
+                printf("OK\n");
+        }
         else if( strcmp(cmd_ingresado, cmd_votar)==0 )
         {
             if(!cmd_param1) continue;
@@ -402,17 +493,20 @@ void leer_entrada(maquina_votacion_t* maquina) {
             if( strcmp(cmd_param1,"inicio")== 0 )
                 comando_votar_inicio(maquina);
 
-            else if( strcmp(cmd_param1,"deshacer")== 0 )
-                comando_votar_deshacer();
-
-            else if( strcmp(cmd_param1,"fin")== 0 )
-                comando_votar_fin();
-
-            else // TODO Validar entrada
-                comando_votar_idPartido(cmd_param1);
+            else if( strcmp(cmd_param1,"deshacer")== 0 ) {
+                if( comando_votar_deshacer(maquina) )
+                    printf("OK\n");
+            }
+            else if( strcmp(cmd_param1,"fin") == 0 ) {
+                if( comando_votar_fin(maquina) )
+                    printf("OK\n");
+            }
+            else
+                if( comando_votar_idPartido(maquina, cmd_param1) )
+                    printf("OK\n");
         }
         else if( strcmp(cmd_ingresado, cmd_cerrar)==0 )
-            comando_cerrar();
+            comando_cerrar(maquina);
 
         destruir_fila_csv(fila, true);
         free(linea);
@@ -429,7 +523,7 @@ int main() {
     if(!maquina) return 1;
 
     cola_t* cola = cola_crear();
-    if(!cola) { free(maquina); return NULL; }
+    if(!cola) { free(maquina); return 2; }
 
     maquina->estado = CERRADA;
     maquina->cola = cola;
