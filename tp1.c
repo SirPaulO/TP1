@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include "lectura/lectura.h"
-#include"lectura_csv/parser.h"
+#include "lectura_csv/parser.h"
 
 #include "tda/cola.h"
 #include "tda/hash.h"
@@ -15,12 +15,28 @@
 #define VECTOR_TAM_INICIAL 50
 #define PUESTOS_A_VOTAR 5 // Cantidad de puestos a votar + 2 (Por ID y Nombre de la lista)
 
+#define PRESIDENTE 1
+#define GOBERNADOR 2
+#define INTENDENTE 3
+
 /* Struct para almacenar los votantes en el padron y la cola */
 typedef struct votante {
     char* documento_tipo;
     char* documento_numero;
     bool voto_realizado;
 } votante_t;
+
+/* Struct para almacenar los votos que reciba un determinado partido politico */
+typedef struct partido_politico
+{
+    char* nombre_partido;
+    char* presidente;
+    char* gobernador;
+    char* intendente;
+    int votos_presidente = 0;
+    int votos_gobernador = 0;
+    int votos_intendente = 0;
+};
 
 /* Codigos de error escritos user-friendly*/
 typedef enum {
@@ -90,6 +106,7 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
 	if(!f)
     {
         error_manager(LECTURA);
+        fclose(listas);
         return false;
     }
 
@@ -101,14 +118,26 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
 
 		lista_t* lista_candidatos = lista_crear();
 		if(!lista_candidatos)
-        { /* TODO: si falla? */ }
+        { /* TODO: si falla? */ 
+
+        }
 
         // TODO: Si devuelve false en algun insertar?
         for(size_t i=0;i<PUESTOS_A_VOTAR;i++)
-            lista_insertar_ultimo(lista_candidatos, obtener_columna(fila, i));
+            bool insertar = lista_insertar_ultimo(lista_candidatos, obtener_columna(fila, i));
+            if(!insertar)
+            {
+                error_manager(OTRO);
+                return false;
+
+            }
 
         // TODO: Si devuelve false al insertar?
-        lista_insertar_ultimo(maquina->listas, lista_candidatos);
+        bool insertar_maquina = lista_insertar_ultimo(maquina->listas, lista_candidatos);
+        if(!insertar_maquina)
+        {
+
+        }
 
         destruir_fila_csv(fila, true);
         lista_candidatos = NULL;
@@ -273,6 +302,32 @@ bool comando_votar_inicio(maquina_votacion_t* maquina){
     // TODO: Mostrar menu de votacion
     return true;
 }
+
+/*
+void mostrar_menu_votacion()
+{
+    switch(maquina->votando_cargo)
+    {
+        case PRESIDENTE:
+            printf("cargo presidente:\n", );
+            printf("1. %s\n", lista->partido->presidente );          TODO::: GONCHIMP   
+                                    lista avanzar!
+            printf("2. %s\n", );
+            printf("3. %s\n", );
+            break;
+
+        case GOBERNADOR:
+            printf("cargo gobernador:\n", );
+
+            break;
+        case INTENDENTE:
+            printf("cargo gobernador:\n", );
+
+            break;
+
+    }
+}
+*/
 
 /*
  Almacenar en la pila de votacion el partido votado.
