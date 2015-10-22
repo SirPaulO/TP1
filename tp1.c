@@ -116,7 +116,7 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
     FILE* f = fopen(listas,"r");
 	if(!f)
     {
-        
+
         fclose(f);
         return error_manager(LECTURA);
     }
@@ -349,16 +349,16 @@ void mostrar_menu_votacion(maquina_votacion_t* maquina) {
         switch(maquina->votando_cargo)
         {
             case PRESIDENTE:
-                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->presidente);
+                printf("%d: %s: %s\n", (int)strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->presidente);
                 break;
             case GOBERNADOR:
-                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->gobernador);
+                printf("%d: %s: %s\n", (int)strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->gobernador);
                 break;
             case INTENDENTE:
-                printf("%d: %s: %s\n", strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->intendente);
+                printf("%d: %s: %s\n", (int)strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->intendente);
                 break;
         }
-    } 
+    }
 }
 
 /*
@@ -374,7 +374,7 @@ bool comando_votar_idPartido(maquina_votacion_t* maquina, char* id) {
 
     if(idPartido < 1 || idPartido > maquina->cantidad_partidos)
     { error_manager(OTRO); return false; }
-    
+
     pila_apilar(maquina->ciclo, id);
     maquina->votando_cargo++;
 
@@ -414,7 +414,7 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
                     case PRESIDENTE: partido->presidente++; break;
                     case GOBERNADOR: partido->gobernador++; break;
                     case INTENDENTE: partido->intendente++; break;
-                } 
+                }
             }
         }
         maquina->votando_cargo--;
