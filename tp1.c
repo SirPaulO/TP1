@@ -68,7 +68,7 @@ typedef struct maquina_votacion{
     // Cola de votantes esperando
     cola_t* cola;
     // Padron de votantes que deben votar
-    hash_t* padron;
+    lista_t* padron;
     // Listas habilitadas para ser votadas
     lista_t* listas;
     // Vector para almacenar los votos
@@ -108,7 +108,6 @@ bool error_manager(error_code code) {
  Post: Devuelve false en caso de no haber modificado maquina->listas.
 */
 bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
-
     lista_t* lista_candidatos = lista_crear();
     if(!lista_candidatos)
         return error_manager(OTRO);
@@ -179,9 +178,17 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
  Post: Devuelve false en caso de no haber modificado maquina->padron.
 */
 bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
-    // TODO: Cerrar archivo antes de devolver False en algun error
+    if(maquina->estado >= ABIERTA) return error_manager(ERROR2);
+
+    lista_t* lista_candidatos = lista_crear();
+    if(!lista_candidatos) return error_manager(OTRO);
+
     FILE* f = fopen(padron,"r");
-	if(!f) return error_manager(LECTURA);
+	if(!f)
+    {
+        lista_destruir(lista_candidatos, NULL);
+        return error_manager(LECTURA);
+    } 
 
 	char* linea = leer_linea(f);
 
@@ -189,15 +196,18 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
 	size_t cantidad_Columnas = 2;
 	while(linea)
 	{
-	    // TODO: si fila es NULL?
 		fila_csv_t* fila = parsear_linea_csv(linea, cantidad_Columnas, false);
-
         votante_t* votante = malloc(sizeof(votante_t));
-		if(!votante)
+
+		if(!votante || !fila)
         {
-            free(fila);
-            free(linea);
+            lista_destruir(lista_candidatos, NULL);
             fclose(f);
+            free(linea);
+            
+            if(fila != NULL) free(fila);
+            if(votante != NULL) free(votante);
+
             return error_manager(OTRO);
         }
 
@@ -208,24 +218,28 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
         votante->documento_tipo = documento_tipo;
         votante->voto_realizado = false;
 
-        bool guardado = hash_guardar(maquina->padron,documento_numero, votante);
+        bool guardado = lista_insertar_ultimo(lista_candidatos, votante);
         if(!guardado)
         {
-            free(fila);
-            free(linea);
+            lista_destruir(lista_candidatos, free);
             fclose(f);
-            hash_destruir(maquina->padron);
+            free(linea);
+            free(fila);
+            free(votante);
             return error_manager(OTRO);
         }
 
         destruir_fila_csv(fila, true);
         votante = NULL;
         free(linea);
+        free(fila);
 
         // Leer proxima linea
         linea = leer_linea(f);
 	}
 	fclose(f);
+    free(linea);
+    maquina->padron = lista_candidatos;
 
 	return true;
 }
