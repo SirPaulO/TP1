@@ -281,6 +281,7 @@ void lista_iterar(lista_t *lista, bool (*visitar)(void *dato, void *extra), void
        lista_iter_avanzar(iter);
 
     lista_iter_destruir(iter);
+
 }
 
 
