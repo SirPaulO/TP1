@@ -22,7 +22,7 @@ typedef enum {
     GOBERNADOR,
     INTENDENTE,
     FIN
-} cargo;
+} cargo_t;
 
 /* Struct para almacenar los votantes en el padron y la cola */
 typedef struct votante {
@@ -74,12 +74,10 @@ typedef struct maquina_votacion{
     lista_t* padron;
     // Listas habilitadas para ser votadas
     lista_t* listas;
-    // Vector para almacenar los votos
-    vector_t* votos;
     // Ciclo donde se guardan los datos mientras un votante este votando
     pila_t* ciclo;
     // Cargo que se esta votando actualmente (de estar votandose)
-    cargo votando_cargo;
+    cargo_t votando_cargo;
     size_t cantidad_partidos;
 } maquina_votacion_t;
 
@@ -256,6 +254,26 @@ bool cargar_padron(maquina_votacion_t* maquina, const char* padron) {
     maquina->padron = lista_candidatos;
 
 	return true;
+}
+
+void destruir_padron(maquina_votacion_t* maquina) {
+    lista_iter_t* iter = lista_iter_crear(maquina->padron);
+    if(!iter) return;
+
+    while(!lista_iter_al_final(iter))
+    {
+        votante_t* votante = lista_iter_ver_actual(iter);
+        if(!votante) lista_iter_destruir(iter);
+
+        // Liberar memoria
+        free(votante->documento_tipo);
+        free(votante->documento_numero);
+        free(votante);
+
+        lista_iter_avanzar(iter);
+    }
+    lista_iter_destruir(iter);
+    lista_destruir(maquina->padron, free);
 }
 
 /*
@@ -459,7 +477,7 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
         while(!lista_iter_al_final(iter))
         {
             partido_politico_t* partido = lista_iter_ver_actual(iter);
-            if(!partido) { free(iter); return error_manager(OTRO); }
+            if(!partido) { lista_iter_destruir(iter); return error_manager(OTRO); }
 
             if(strcmp(partido->idPartido, id) == 0)
             {
@@ -505,8 +523,35 @@ bool comando_votar_deshacer(maquina_votacion_t* maquina) {
 }
 
 /* Procesar todos los votos y volcal resultados */
-void comando_cerrar(maquina_votacion_t* maquina) {
-    printf("Comando cerrar ejecutado \n");
+bool comando_cerrar(maquina_votacion_t* maquina) {
+    if(DEBUG) printf("Comando cerrar ejecutado\n");
+    if(maquina->estado < ABIERTA) return error_manager(OTRO);
+    if(maquina->estado > ABIERTA || !cola_esta_vacia(maquina->cola) ) return error_manager(COLA_NO_VACIA);
+
+    lista_iter_t* iter = lista_iter_crear(maquina->listas);
+    if(!iter) return error_manager(OTRO);
+
+    while(!lista_iter_al_final(iter))
+    {
+        partido_politico_t* partido = lista_iter_ver_actual(iter);
+        if(!partido) { lista_iter_destruir(iter); return error_manager(OTRO); }
+        printf("%s:\nPresidente: %d votos\nGobernador: %d votos\nIntendente: %d votos\n\n", 
+            partido->nombre_partido, partido->votos_presidente, partido->votos_gobernador, partido->votos_intendente);
+        // Liberar memoria
+        free(partido->idPartido);
+        free(partido->nombre_partido);
+        free(partido->presidente);
+        free(partido->gobernador);
+        free(partido->intendente);
+        //free(partido);
+
+        lista_iter_avanzar(iter);
+    }
+    lista_iter_destruir(iter);
+    lista_destruir(maquina->listas, free);
+
+    destruir_padron(maquina);
+    return true;
 }
 
 /* Leer entrada e intentar formatear comandos */
@@ -528,7 +573,8 @@ void leer_entrada(maquina_votacion_t* maquina) {
 	    char* cmd_param2 = NULL;
 
 		char* linea = leer_linea(stdin);
-		if(!linea || strlen(linea) == 0)
+        // 5 = cantidad minima de caracteres del comando mas corto valido.
+		if(!linea || strlen(linea) < 5)
         {
             free(linea);
             continue;
@@ -566,11 +612,18 @@ void leer_entrada(maquina_votacion_t* maquina) {
                     printf("OK\n");
             }
             else
+            {
                 if( comando_votar_idPartido(maquina, cmd_param1) )
                     printf("OK\n");
+            }
         }
         else if( strcmp(cmd_ingresado, cmd_cerrar)==0 )
-            comando_cerrar(maquina);
+            if( comando_cerrar(maquina) )
+            {
+                destruir_fila_csv(fila, true);
+                free(linea);
+                return;
+            }
 
         destruir_fila_csv(fila, true);
         free(linea);
@@ -599,8 +652,8 @@ int main() {
 
     leer_entrada(maquina);
 
-    free(maquina);
     cola_destruir(cola, free);
+    free(maquina);
 
 	return 0;
 }
