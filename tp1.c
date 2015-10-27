@@ -18,7 +18,8 @@
 typedef enum {
     PRESIDENTE,
     GOBERNADOR,
-    INTENDENTE
+    INTENDENTE,
+    FIN
 } cargo;
 
 /* Struct para almacenar los votantes en el padron y la cola */
@@ -76,7 +77,7 @@ typedef struct maquina_votacion{
     // Ciclo donde se guardan los datos mientras un votante este votando
     pila_t* ciclo;
     // Cargo que se esta votando actualmente (de estar votandose)
-    int votando_cargo;
+    cargo votando_cargo;
     size_t cantidad_partidos;
 } maquina_votacion_t;
 
@@ -205,8 +206,8 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
             fclose(f);
             free(linea);
 
-            if(fila != NULL) free(fila);
-            if(votante != NULL) free(votante);
+            if(fila) free(fila);
+            if(votante) free(votante);
 
             return error_manager(OTRO);
         }
@@ -297,18 +298,6 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
     return error_manager(OTRO);
 }
 
-bool buscar_documento(void* dato, void* extra) {
-    votante_t* votante = dato;
-    char* documento_numero = extra;
-
-    if( strcmp(votante->documento_numero, documento_numero) == 0)
-    {
-        extra = votante;
-        return false;
-    }
-    return true;
-}
-
 /*
  Desencolar y realizar validacion del Documento tipo/numero del votante y no haber votado
  Crear pila para ciclo de votacion actual
@@ -319,35 +308,44 @@ bool comando_votar_inicio(maquina_votacion_t* maquina){
     if(maquina->estado == VOTACION)     { return error_manager(OTRO); }
     if(cola_esta_vacia(maquina->cola))  { return error_manager(NO_VOTANTES); }
 
+    votante_t* votante_padron = NULL;
+    bool enpadronado = false;
+
     votante_t* votante_espera = cola_desencolar(maquina->cola);
-    if(!votante_espera) { return error_manager(OTRO); }
+    if(!votante_espera) return error_manager(OTRO);
 
-    lista_iterar(maquina->padron, buscar_documento, votante_espera->documento_numero);
+    pila_t* ciclo_votacion = pila_crear();
+    lista_iter_t* lista_iter = lista_iter_crear(maquina->padron);
 
-    bool enpadronado =
-    // TODO ACA!
-    if(!enpadronado)
-    {
-            free(votante_espera);
-            return error_manager(NO_ENPADRONADO);
-    }
-
-    votante_t* votante_padron = hash_obtener(maquina->padron, votante_espera->documento_numero);
-
-    if(votante_padron->voto_realizado)
-    {
-        free(votante_espera);
-        free(votante_padron);
-        return error_manager(VOTO_REALIZADO);
-    }
-
-    pila_t* ciclo = pila_crear();
-    if(!ciclo)
+    if(!ciclo_votacion || !lista_iter) {
+        if(ciclo_votacion) free(ciclo_votacion);
+        if(lista_iter) free(lista_iter);
         return error_manager(OTRO);
+    }
 
+    while(!lista_iter_al_final(lista_iter))
+    {
+        votante_padron = lista_iter_ver_actual(lista_iter);
+        if( strcmp(votante_padron->documento_numero, votante_espera->documento_numero) == 0)
+        {
+            enpadronado = true;
+            break;
+        }
+        lista_iter_avanzar(lista_iter);
+    }
+    lista_iter_destruir(lista_iter);
+    free(votante_espera);
+
+    if(!enpadronado || votante_padron->voto_realizado)
+    {
+            free(ciclo_votacion);
+            return enpadronado ? error_manager(VOTO_REALIZADO) : error_manager(NO_ENPADRONADO);
+    }
+
+    votante_padron->voto_realizado = true;
     maquina->estado = VOTACION;
-    maquina->ciclo = ciclo;
-    maquina->votando_cargo = 0;
+    maquina->ciclo = ciclo_votacion;
+    maquina->votando_cargo = PRESIDENTE;
 
     mostrar_menu_votacion(maquina);
     return true;
@@ -368,6 +366,7 @@ void mostrar_menu_votacion(maquina_votacion_t* maquina) {
         case PRESIDENTE: printf("Cargo: Presidente\n"); break;
         case GOBERNADOR: printf("Cargo: Gobernador\n"); break;
         case INTENDENTE: printf("Cargo: Intendente\n"); break;
+        case FIN: free(iter); return; break; // Tecnicamente nunca deberia llegar aca.
     }
 
     while(!lista_iter_al_final(iter))
@@ -386,6 +385,7 @@ void mostrar_menu_votacion(maquina_votacion_t* maquina) {
             case INTENDENTE:
                 printf("%d: %s: %s\n", (int)strtol(partido->idPartido, NULL, 10), partido->nombre_partido, partido->intendente);
                 break;
+            case FIN: break; // -Werror=switch
         }
     }
 }
@@ -396,18 +396,18 @@ void mostrar_menu_votacion(maquina_votacion_t* maquina) {
 */
 bool comando_votar_idPartido(maquina_votacion_t* maquina, char* id) {
     printf("Comando votar idPartido ejecutado \n");
-    if(maquina->estado < VOTACION || (maquina->votando_cargo > INTENDENTE) )
+    if(maquina->estado < VOTACION || (maquina->votando_cargo >= FIN) )
         return error_manager(OTRO);
 
     long int idPartido = strtol(id, NULL, 10);
 
     if(idPartido < 1 || idPartido > maquina->cantidad_partidos)
-    { error_manager(OTRO); return false; }
+        return error_manager(OTRO);
 
     pila_apilar(maquina->ciclo, id);
     maquina->votando_cargo++;
 
-    if(maquina->votando_cargo < INTENDENTE)
+    if(maquina->votando_cargo < FIN)
         mostrar_menu_votacion(maquina);
 
     return true;
@@ -420,7 +420,7 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
     if(maquina->estado < VOTACION)
         return error_manager(OTRO);
 
-    if(maquina->votando_cargo < INTENDENTE)
+    if(maquina->votando_cargo < FIN)
         return error_manager(FALTA_VOTAR);
 
     while(!pila_esta_vacia(maquina->ciclo))
@@ -429,12 +429,12 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
         // TODO if(!id)
 
         lista_iter_t* iter = lista_iter_crear(maquina->listas);
-        if(!iter) { error_manager(OTRO); return false; }
+        if(!iter) return error_manager(OTRO);
 
         while(!lista_iter_al_final(iter))
         {
             partido_politico_t* partido = lista_iter_ver_actual(iter);
-            if(!partido) { error_manager(OTRO); free(iter); return false; }
+            if(!partido) { free(iter); return error_manager(OTRO); }
 
             if(strcmp(partido->idPartido, id) == 0)
             {
@@ -443,13 +443,16 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
                     case PRESIDENTE: partido->presidente++; break;
                     case GOBERNADOR: partido->gobernador++; break;
                     case INTENDENTE: partido->intendente++; break;
+                    case FIN: break; // -Werror=switch
                 }
             }
         }
         maquina->votando_cargo--;
     }
 
-    maquina->votando_cargo = 0;
+    // Reset de variables.
+    pila_destruir(maquina->ciclo);
+    maquina->estado = ABIERTA;
     return true;
 }
 
@@ -465,7 +468,7 @@ bool comando_votar_deshacer(maquina_votacion_t* maquina) {
     maquina->votando_cargo--;
     pila_desapilar(maquina->ciclo);
 
-    if(maquina->votando_cargo < INTENDENTE)
+    if(maquina->votando_cargo < FIN) // Redundante.
         mostrar_menu_votacion(maquina);
 
     return true;
