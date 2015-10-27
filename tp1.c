@@ -178,7 +178,7 @@ bool cargar_listas(maquina_votacion_t* maquina, char* listas) {
  Post: Devuelve false en caso de no haber modificado maquina->padron.
 */
 bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
-    if(maquina->estado >= ABIERTA) return error_manager(ERROR2);
+    if(maquina->estado >= ABIERTA) return error_manager(MESA_ABIERTA);
 
     lista_t* lista_candidatos = lista_crear();
     if(!lista_candidatos) return error_manager(OTRO);
@@ -188,7 +188,7 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
     {
         lista_destruir(lista_candidatos, NULL);
         return error_manager(LECTURA);
-    } 
+    }
 
 	char* linea = leer_linea(f);
 
@@ -204,7 +204,7 @@ bool cargar_padron(maquina_votacion_t* maquina, char* padron) {
             lista_destruir(lista_candidatos, NULL);
             fclose(f);
             free(linea);
-            
+
             if(fila != NULL) free(fila);
             if(votante != NULL) free(votante);
 
@@ -260,10 +260,10 @@ bool comando_abrir(maquina_votacion_t* maquina, char* listas, char* padron) {
     if(!maquina->listas)
         return error_manager(OTRO);
 
-    maquina->padron = hash_crear(free);
+    maquina->padron = lista_crear();
     if(!maquina->padron)
     {
-        lista_destruir(maquina->listas, free);
+        lista_destruir(maquina->listas, NULL);
         return error_manager(OTRO);
     }
 
@@ -297,6 +297,18 @@ bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* d
     return error_manager(OTRO);
 }
 
+bool buscar_documento(void* dato, void* extra) {
+    votante_t* votante = dato;
+    char* documento_numero = extra;
+
+    if( strcmp(votante->documento_numero, documento_numero) == 0)
+    {
+        extra = votante;
+        return false;
+    }
+    return true;
+}
+
 /*
  Desencolar y realizar validacion del Documento tipo/numero del votante y no haber votado
  Crear pila para ciclo de votacion actual
@@ -310,7 +322,10 @@ bool comando_votar_inicio(maquina_votacion_t* maquina){
     votante_t* votante_espera = cola_desencolar(maquina->cola);
     if(!votante_espera) { return error_manager(OTRO); }
 
-    bool enpadronado = hash_pertenece(maquina->padron, votante_espera->documento_numero);
+    lista_iterar(maquina->padron, buscar_documento, votante_espera->documento_numero);
+
+    bool enpadronado =
+    // TODO ACA!
     if(!enpadronado)
     {
             free(votante_espera);
