@@ -411,7 +411,7 @@ bool comando_votar_inicio(maquina_votacion_t* maquina) {
     lista_iter_t* lista_iter = lista_iter_crear(maquina->padron);
 
     if(!ciclo_votacion || !lista_iter) {
-        if(ciclo_votacion) free(ciclo_votacion);
+        if(ciclo_votacion) pila_destruir(ciclo_votacion);
         if(lista_iter) free(lista_iter);
         return error_manager(OTRO);
     }
@@ -433,7 +433,7 @@ bool comando_votar_inicio(maquina_votacion_t* maquina) {
 
     if(!enpadronado || votante_padron->voto_realizado)
     {
-            free(ciclo_votacion);
+            pila_destruir(ciclo_votacion);
             return enpadronado ? error_manager(VOTO_REALIZADO) : error_manager(NO_ENPADRONADO);
     }
 
@@ -527,10 +527,14 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
     if(maquina->votando_cargo < FIN)
         return error_manager(FALTA_VOTAR);
 
+    // En caso de desapilar un NULL, que anule el voto.
+    bool saltear = false;
     while(!pila_esta_vacia(maquina->ciclo))
     {
         char* id = pila_desapilar(maquina->ciclo);
-        // TODO if(!id)
+        if(DEBUG)  printf("Pila desapilada. Pos %d, Val: %s\n", maquina->votando_cargo, id);
+        if(!id) saltear = true;
+        if(saltear) continue;
 
         lista_iter_t* iter = lista_iter_crear(maquina->listas);
         if(!iter) { free(id); return error_manager(OTRO); }
@@ -559,9 +563,12 @@ bool comando_votar_fin(maquina_votacion_t* maquina) {
     }
 
     // Reset de variables.
+    if(pila_esta_vacia(maquina->ciclo) && DEBUG) printf("Pila vacia\n");
     pila_destruir(maquina->ciclo);
     maquina->ciclo = NULL;
     maquina->estado = ABIERTA;
+
+    if(saltear) return error_manager(OTRO);
     return true;
 }
 
