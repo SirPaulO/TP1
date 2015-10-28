@@ -10,10 +10,6 @@
 #include "tda/cola.h"
 #include "tda/lista.h"
 #include "tda/pila.h"
-#include "tda/vector_dinamico.h"
-
-#define VECTOR_TAM_INICIAL 256
-#define CARGOS_A_VOTAR 5 // Cantidad de puestos a votar + 2 (Por ID y Nombre de la lista)
 
 #define DEBUG 0
 
@@ -81,8 +77,32 @@ typedef struct maquina_votacion{
     size_t cantidad_partidos;
 } maquina_votacion_t;
 
-/****** PROTOS ******/
+/************ PROTOTYPES ************/
+bool error_manager(error_code code);
+char* copiar_clave(const char *clave);
+size_t obtener_cantidad_columnas(char* cadena, char separador);
+
+void leer_entrada(maquina_votacion_t* maquina);
+
+bool comando_abrir(maquina_votacion_t* maquina, const char* listas, const char* padron);
+bool cargar_listas(maquina_votacion_t* maquina, const char* listas);
+bool cargar_padron(maquina_votacion_t* maquina, const char* padron);
+
+bool comando_ingresar(maquina_votacion_t* maquina, char* documento_tipo, char* documento_numero);
+
+bool comando_votar_inicio(maquina_votacion_t* maquina);
+bool comando_votar_idPartido(maquina_votacion_t* maquina, char* id);
+bool comando_votar_deshacer(maquina_votacion_t* maquina);
+bool comando_votar_fin(maquina_votacion_t* maquina);
+
 void mostrar_menu_votacion(maquina_votacion_t*);
+
+bool comando_cerrar(maquina_votacion_t* maquina);
+void cerrar_maquina(maquina_votacion_t* maquina);
+void destruir_padron(maquina_votacion_t* maquina);
+void destruir_listas(maquina_votacion_t* maquina);
+void destruir_ciclo(maquina_votacion_t* maquina);
+void destruir_cola(maquina_votacion_t* maquina);
 
 /* Imprime codigo de error */
 bool error_manager(error_code code) {
@@ -111,8 +131,8 @@ char* copiar_clave(const char *clave) {
 }
 
 /*
- Abre el archivo de listas y crea una lista_t por cada lista de candidatos (cada linea del archivo es una lista).
- Carga cada lista_t creada dentro de la lista de maquina->listas
+ Abre el archivo de listas y crea un partido_t por cada lista de candidatos (cada linea del archivo es una lista).
+ Carga cada partido_t creado dentro de la lista de maquina->listas
  Post: Devuelve false en caso de no haber modificado maquina->listas.
 */
 bool cargar_listas(maquina_votacion_t* maquina, const char* listas) {
@@ -136,9 +156,10 @@ bool cargar_listas(maquina_votacion_t* maquina, const char* listas) {
 
 	while(linea)
 	{
+        size_t columnas = 5;
         cantidad_partidos++;
         partido_politico_t* partido = malloc(sizeof(partido_politico_t));
-		fila_csv_t* fila = parsear_linea_csv(linea, CARGOS_A_VOTAR, false);
+		fila_csv_t* fila = parsear_linea_csv(linea, columnas, false);
 
 		free(linea); // No se usa mas, se libera.
 
@@ -257,6 +278,7 @@ bool cargar_padron(maquina_votacion_t* maquina, const char* padron) {
 	return true;
 }
 
+/* Destruye la lista del padron y sus elementos */
 void destruir_padron(maquina_votacion_t* maquina) {
     if(!maquina->padron) return;
 
@@ -280,6 +302,7 @@ void destruir_padron(maquina_votacion_t* maquina) {
     maquina->padron = NULL;
 }
 
+/* Destruye la lista de partidos y sus elementos */
 void destruir_listas(maquina_votacion_t* maquina) {
     if(!maquina->listas) return;
 
@@ -305,6 +328,7 @@ void destruir_listas(maquina_votacion_t* maquina) {
     maquina->listas = NULL;
 }
 
+/* Destruye la pila del ciclo de votacion */
 void destruir_ciclo(maquina_votacion_t* maquina) {
     if(!maquina->ciclo) return;
     while(!pila_esta_vacia(maquina->ciclo))
@@ -318,6 +342,7 @@ void destruir_ciclo(maquina_votacion_t* maquina) {
     maquina->ciclo = NULL;
 }
 
+/* Destruye la cola de votantes y sus elementos */
 void destruir_cola(maquina_votacion_t* maquina) {
     if(!maquina->cola) return;
 
@@ -334,6 +359,7 @@ void destruir_cola(maquina_votacion_t* maquina) {
     maquina->cola = NULL;
 }
 
+/* Llama a las funciones de destruccion necesarias */
 void cerrar_maquina(maquina_votacion_t* maquina) {
     if(DEBUG) printf("Cerrar maquinas por las pruebas de mierda.\n");
 
@@ -344,9 +370,7 @@ void cerrar_maquina(maquina_votacion_t* maquina) {
 }
 
 /*
- Abrir archivos .csv y almacenar la informacion en TDAs
- Lista para las listas.
- Hash para el padron.
+ Si recibe parametros validos, llama a funciones abrir de listas y padron.
 */
 bool comando_abrir(maquina_votacion_t* maquina, const char* listas, const char* padron) {
     if(DEBUG) printf("Comando abrir ejecutado.");
@@ -623,6 +647,7 @@ bool comando_cerrar(maquina_votacion_t* maquina) {
     return true;
 }
 
+/* Obtiene cantidad de columnas de una cadena, separadas por el parametro separador */
 size_t obtener_cantidad_columnas(char* cadena, char separador) {
     char* caracter = cadena;
     size_t conteo = 1;
@@ -654,11 +679,7 @@ void leer_entrada(maquina_votacion_t* maquina) {
         }
 
         // 5 = cantidad minima de caracteres del comando mas corto valido.
-		if(strlen(linea) < 5)
-        {
-            free(linea);
-            continue;
-        }
+		// if(strlen(linea) < 5) { free(linea); continue; }
 
         size_t columnas = obtener_cantidad_columnas(linea, ' ');
 
@@ -670,10 +691,9 @@ void leer_entrada(maquina_votacion_t* maquina) {
 
         }
 
-        char* cmd_ingresado = obtener_columna(fila, 0) ? obtener_columna(fila, 0) : "";
-        char* cmd_param1 = obtener_columna(fila, 1) ? obtener_columna(fila, 1) : "";
+        char* cmd_ingresado = obtener_columna(fila, 0);
+        char* cmd_param1 = obtener_columna(fila, 1);
         char* cmd_param2 = obtener_columna(fila, 2);
-
 
         if( strcmp(cmd_ingresado, cmd_abrir)==0 ) {
             if( comando_abrir(maquina, cmd_param1, cmd_param2) )
@@ -687,11 +707,11 @@ void leer_entrada(maquina_votacion_t* maquina) {
         {
             if(!cmd_param1) continue;
 
-            if( strcmp(cmd_param1,"inicio")== 0 )
+            if( strcmp(cmd_param1,"inicio") == 0 )
             {
                 comando_votar_inicio(maquina);
             }
-            else if( strcmp(cmd_param1,"deshacer")== 0 ) {
+            else if( strcmp(cmd_param1,"deshacer") == 0 ) {
                 if( comando_votar_deshacer(maquina) )
                 {
                     printf("OK\n");
@@ -713,9 +733,7 @@ void leer_entrada(maquina_votacion_t* maquina) {
 
         destruir_fila_csv(fila, true);
         free(linea);
-        //fflush(stdin);
 	}
-
 }
 
 /*
