@@ -26,7 +26,7 @@ pila_t* pila_crear();
 // Destruye la pila.
 // Pre: la pila fue creada.
 // Post: se eliminaron todos los elementos de la pila.
-void pila_destruir(pila_t *pila);
+void pila_destruir(pila_t *pila, void destruir_dato(void*));
 
 // Devuelve verdadero o falso, según si la pila tiene o no elementos apilados.
 // Pre: la pila fue creada.

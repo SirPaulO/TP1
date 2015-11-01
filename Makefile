@@ -10,8 +10,11 @@ all: main
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $<
 
-ship: clean_all
+ship_tar: clean_all
 	tar -czf entrega.tar.gz Makefile *.c *.h
+
+ship_zip: clean_all
+	zip entrega.zip Makefile *.c *.h
 	
 main: $(BINFILES)  $(EXEC).c
 	$(CC) $(CFLAGS) $(BINFILES) $(EXEC).c -o $(EXEC)
@@ -22,5 +25,6 @@ clean:
 clean_all:
 	rm -f $(wildcard *.o) $(EXEC)
 	rm -f entrega.tar.gz
+	rm -f entrega.zip
 
-.PHONY: clean clean_all main ship
+.PHONY: clean clean_all main ship_tar ship_zip
