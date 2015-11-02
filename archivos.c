@@ -1,7 +1,9 @@
-#include "util.c"
+#include "util.h"
 #include "lista.h"
 #include "lectura.h"
 #include "parser.h"
+
+#define DEBUG 0
 
 /* Struct para almacenar los votantes en el padron y la cola */
 typedef struct votante {
@@ -14,7 +16,7 @@ typedef struct votante {
 typedef struct partido_politico {
     char* id;
     char* nombre;
-    char** cargos;
+    char** postulantes;
     size_t** votos;
     size_t largo;
 } partido_politico_t;
@@ -37,7 +39,7 @@ lista_t* cargar_csv_en_lista(maquina_votacion_t* maquina, const char* nombre, bo
 
     char* linea = leer_linea(f);
     if(!linea) { error_manager(OTRO); return NULL; }
-    
+
     // Saltear primer linea.
     free(linea);
     linea = leer_linea(f);
@@ -87,20 +89,25 @@ bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas) {
     partido->id = obtener_columna(fila, 0);
     partido->nombre = obtener_columna(fila, 1);
 
-    char* cargos[columnas-2];
-    size_t* votos[columnas-2];
+    char** postulantes = malloc(sizeof(char*)*(columnas-2));
+    //char* postulantes[columnas-2];
+    size_t** votos = malloc(sizeof(size_t*)*(columnas-2));
+    //size_t* votos[columnas-2];
 
     for(size_t i=0;i<columnas-2;i++)
     {
-        cargos[i] = obtener_columna(fila, i+2);
-        votos[i] = 0;
+        size_t* cero = malloc(sizeof(size_t*));
+        *cero = 0;
+        votos[i] = cero;
+        postulantes[i] = obtener_columna(fila, i+2);
+        if(DEBUG) printf("Postulante: %s, votos: %zu\n", postulantes[i], *votos[i]);
     }
 
-    partido->cargos = cargos;
+    partido->postulantes = postulantes;
     partido->votos = votos;
     partido->largo = columnas-2;
 
-    //if(DEBUG) printf("Listas: %s, %s, %s\n", partido->idPartido, partido->nombre_partido, partido->presidente);
+    if(DEBUG) printf("Partido: %s, %s, %s\n", partido->id, partido->nombre, partido->postulantes[0]);
 
     bool insertar = lista_insertar_ultimo(lista, partido);
     if(!insertar)
@@ -131,7 +138,7 @@ bool enlistar_votante(fila_csv_t* fila, lista_t* lista, size_t columnas) {
     votante->documento_numero = obtener_columna(fila, 1);
     votante->voto_realizado = false;
 
-    //if(DEBUG) printf("Padron: %s, %s\n", votante->documento_tipo, votante->documento_numero);
+    if(DEBUG) printf("Padron: %s, %s\n", votante->documento_tipo, votante->documento_numero);
 
     bool insertar = lista_insertar_ultimo(lista, votante);
     if(!insertar)
@@ -164,8 +171,12 @@ void destruir_partido(void* dato) {
     free(partido->id);
     free(partido->nombre);
     for(size_t i=0;i<partido->largo;i++)
-        free(partido->cargos[i]);
-    free(partido->cargos);
+    {
+        free(partido->postulantes[i]);
+        free(partido->votos[i]);
+    }
+
+    free(partido->postulantes);
     free(partido->votos);
     free(partido);
 }

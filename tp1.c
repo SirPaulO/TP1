@@ -4,8 +4,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "util.c"
-#include "archivos.c"
+#include "util.h"
+#include "archivos.h"
+
+#include "lectura.h"
+#include "parser.h"
 
 #include "cola.h"
 #include "pila.h"
@@ -30,6 +33,7 @@ typedef enum {
 } maquina_estado;
 
 struct maquina_votacion {
+
     // Estado actual de la maquina
     maquina_estado estado;
     // Cola de votantes esperando
@@ -44,7 +48,6 @@ struct maquina_votacion {
     cargo_t votando_cargo;
     size_t cantidad_partidos;
 };
-
 typedef struct voto {
     char* partido_id;
     size_t cargo;
@@ -67,16 +70,25 @@ void mostrar_menu_votacion(maquina_votacion_t*);
 bool comando_cerrar(maquina_votacion_t* maquina);
 void cerrar_maquina(maquina_votacion_t* maquina);
 
+/************************************/
+
 /* Llama a las funciones de destruccion necesarias */
 void cerrar_maquina(maquina_votacion_t* maquina) {
-    lista_destruir(maquina->padron, destruir_partido);
+    if(maquina->padron)
+        lista_destruir(maquina->padron, destruir_votante);
     maquina->padron = NULL;
-    lista_destruir(maquina->listas, destruir_votante);
+
+    if(maquina->listas)
+        lista_destruir(maquina->listas, destruir_partido);
     maquina->listas = NULL;
-    cola_destruir(maquina->cola, destruir_votante);
+
+    if(maquina->cola)
+        cola_destruir(maquina->cola, destruir_votante);
     maquina->cola = NULL;
+
     /* Destruye la pila del ciclo de votacion */
-    pila_destruir(maquina->ciclo, free);
+    if(maquina->ciclo)
+        pila_destruir(maquina->ciclo, free);
     maquina->ciclo = NULL;
 }
 
@@ -97,6 +109,7 @@ bool comando_abrir(maquina_votacion_t* maquina, const char* listas, const char* 
     maquina->padron = cargar_csv_en_lista(maquina, padron, enlistar_votante);
     if(!maquina->padron) { lista_destruir(maquina->listas, destruir_votante); return false; }
 
+    maquina->cantidad_partidos = lista_largo(maquina->listas);
 	maquina->estado = ABIERTA;
 
     return true;
@@ -184,10 +197,11 @@ bool comando_votar_inicio(maquina_votacion_t* maquina) {
     return true;
 }
 
+/* Imprime el nombre del partido y el postulante para el cargo especificado */
 bool imprimir_cargo(void* dato, void* extra){
     partido_politico_t* partido = dato;
     int* cargo = extra;
-    printf("%d: %s: %s\n", (int)strtol(partido->id, NULL, 10), partido->nombre, partido->cargos[*cargo]);
+    printf("%d: %s: %s\n", (int)strtol(partido->id, NULL, 10), partido->nombre, partido->postulantes[*cargo]);
     return true;
 }
 
@@ -240,8 +254,9 @@ bool votar_partido(void* dato, void* extra) {
     if(strcmp(partido->id, voto->partido_id) != 0)
         return true;
 
-    if(DEBUG) printf("Partido ID votado: %s, Cargo %d\n", voto->partido_id, voto->cargo);
-    partido->votos[voto->cargo]++;
+    if(DEBUG) printf("Partido ID votado: %s, Cargo %zu\n", voto->partido_id, voto->cargo);
+    size_t* votos = partido->votos[voto->cargo];
+    (*votos)++;
     return false;
 }
 
@@ -288,7 +303,7 @@ bool comando_votar_deshacer(maquina_votacion_t* maquina) {
         return error_manager(NO_DESHACER);
 
     maquina->votando_cargo--;
-    free(pila_desapilar(maquina->ciclo));
+    destruir_voto(pila_desapilar(maquina->ciclo));
 
     return true;
 }
@@ -311,7 +326,8 @@ bool comando_cerrar(maquina_votacion_t* maquina) {
 
         for(size_t i=0;i<partido->largo;i++)
         {
-            printf("%s: %d votos\n", partido->cargos[i], partido->votos[i]);
+            size_t* votos = partido->votos[i];
+            printf("%s: %zu votos\n", CARGOS[i], *votos);
         }
         printf("\n");
 

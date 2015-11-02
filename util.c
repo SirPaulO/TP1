@@ -1,28 +1,11 @@
-#ifndef UTIL_H
-#define UTIL_H
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 
-/* Codigos de error escritos user-friendly*/
-typedef enum {
-    LECTURA,
-    MESA_ABIERTA,
-    MESA_CERRADA,
-    NUMERO_NEGATIVO,
-    VOTO_REALIZADO,
-    NO_ENPADRONADO,
-    NO_VOTANTES,
-    NO_DESHACER,
-    FALTA_VOTAR,
-    OTRO,
-    COLA_NO_VACIA
-} error_code;
 
 /* Imprime codigo de error */
-bool error_manager(error_code code) {
+bool error_manager(int code) {
     /*
     ERROR1: si hubo un error en la lectura de los archivos (o archivos inexistentes).
     ERROR2: si la mesa ya estaba previamente abierta
@@ -59,5 +42,3 @@ size_t obtener_cantidad_columnas(char* cadena, char separador) {
     }
     return conteo;
 }
-
-#endif // UTIL_H
