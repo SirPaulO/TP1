@@ -2,22 +2,8 @@
 #include "lista.h"
 #include "lectura.h"
 #include "parser.h"
+#include "votante_partido.h"
 
-/* Struct para almacenar los votantes en el padron y la cola */
-typedef struct votante {
-    char* documento_tipo;
-    char* documento_numero;
-    bool voto_realizado;
-} votante_t;
-
-/* Struct para almacenar los votos que reciba un determinado partido politico */
-typedef struct partido_politico {
-    char* id;
-    char* nombre;
-    char** postulantes;
-    size_t** votos;
-    size_t largo;
-} partido_politico_t;
 
 typedef struct maquina_votacion maquina_votacion_t;
 
@@ -25,9 +11,6 @@ typedef struct maquina_votacion maquina_votacion_t;
 lista_t* cargar_csv_en_lista(maquina_votacion_t* maquina, const char* nombre, bool (*func)(fila_csv_t*, lista_t*, size_t) );
 bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas);
 bool enlistar_votante(fila_csv_t* fila, lista_t* lista, size_t columnas);
-void destruir_votante(void* dato);
-void destruir_partido(void* dato);
-
 /************************************/
 
 lista_t* cargar_csv_en_lista(maquina_votacion_t* maquina, const char* nombre, bool (*func)(fila_csv_t*, lista_t*, size_t) ) {
@@ -80,12 +63,8 @@ lista_t* cargar_csv_en_lista(maquina_votacion_t* maquina, const char* nombre, bo
 */
 bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas) {
 
-    partido_politico_t* partido = malloc(sizeof(partido_politico_t));
-
-    if(!partido) return error_manager(OTRO); // TODO O simplemente False?
-
-    partido->id = obtener_columna(fila, 0);
-    partido->nombre = obtener_columna(fila, 1);
+    size_t partido_id = (size_t)strtol(obtener_columna(fila, 0), NULL, 10);
+    free(obtener_columna(fila, 0));
 
     char** postulantes = malloc(sizeof(char*)*(columnas-2));
     //char* postulantes[columnas-2];
@@ -103,13 +82,8 @@ bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas) {
         #endif
     }
 
-    partido->postulantes = postulantes;
-    partido->votos = votos;
-    partido->largo = columnas-2;
-
-    #ifdef DEBUG
-    printf("Partido: %s, %s, %s\n", partido->id, partido->nombre, partido->postulantes[0]);
-    #endif
+    partido_politico_t* partido = partido_crear(partido_id, obtener_columna(fila, 1), postulantes, votos, columnas-2);
+    if(!partido) return NULL; // TODO: O falso?
 
     bool insertar = lista_insertar_ultimo(lista, partido);
     if(!insertar)
@@ -129,16 +103,8 @@ bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas) {
 */
 bool enlistar_votante(fila_csv_t* fila, lista_t* lista, size_t columnas) {
 
-    votante_t* votante = malloc(sizeof(votante_t));
-
+    votante_t* votante = votante_crear(obtener_columna(fila, 0), obtener_columna(fila, 1));
     if(!votante) return error_manager(OTRO); // TODO O simplemente False?
-
-    //char* documento_tipo = obtener_columna(fila, 0);
-    //char* documento_numero = obtener_columna(fila, 1);
-
-    votante->documento_tipo = obtener_columna(fila, 0);
-    votante->documento_numero = obtener_columna(fila, 1);
-    votante->voto_realizado = false;
 
     #ifdef DEBUG
     printf("Padron: %s, %s\n", votante->documento_tipo, votante->documento_numero);
@@ -148,39 +114,9 @@ bool enlistar_votante(fila_csv_t* fila, lista_t* lista, size_t columnas) {
     if(!insertar)
     {
         free(votante);
-        lista_destruir(lista, destruir_votante);
+        lista_destruir(lista, votante_destruir);
         return error_manager(OTRO); // TODO O simplemente False?
     }
 
     return true;
-}
-
-/* Destruye la lista del padron y sus elementos */
-void destruir_votante(void* dato) {
-    votante_t* votante = dato;
-    if(!votante) return;
-
-    // Liberar memoria
-    free(votante->documento_tipo);
-    free(votante->documento_numero);
-    free(votante);
-}
-
-/* Destruye la lista de partidos y sus elementos */
-void destruir_partido(void* dato) {
-    partido_politico_t* partido = dato;
-    if(!partido) return;
-
-    // Liberar memoria
-    free(partido->id);
-    free(partido->nombre);
-    for(size_t i=0;i<partido->largo;i++)
-    {
-        free(partido->postulantes[i]);
-        free(partido->votos[i]);
-    }
-
-    free(partido->postulantes);
-    free(partido->votos);
-    free(partido);
 }
