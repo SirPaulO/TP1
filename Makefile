@@ -11,10 +11,10 @@ all: main
 	$(CC) $(CFLAGS) -c $<
 
 ship_tar: clean_all
-	tar -czf entrega.tar.gz Makefile *.c *.h
+	tar -czf entrega.tar.gz Makefile *.c *.h *.pdf
 
 ship_zip: clean_all
-	zip entrega.zip Makefile *.c *.h
+	zip entrega.zip Makefile *.c *.h *.pdf
 	
 main: $(BINFILES)  $(EXEC).c
 	$(CC) $(CFLAGS) $(BINFILES) $(EXEC).c -o $(EXEC)

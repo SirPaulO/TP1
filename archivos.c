@@ -3,8 +3,6 @@
 #include "lectura.h"
 #include "parser.h"
 
-#define DEBUG 0
-
 /* Struct para almacenar los votantes en el padron y la cola */
 typedef struct votante {
     char* documento_tipo;
@@ -100,14 +98,18 @@ bool enlistar_partido(fila_csv_t* fila, lista_t* lista, size_t columnas) {
         *cero = 0;
         votos[i] = cero;
         postulantes[i] = obtener_columna(fila, i+2);
-        if(DEBUG) printf("Postulante: %s, votos: %zu\n", postulantes[i], *votos[i]);
+        #ifdef DEBUG
+        printf("Postulante: %s, votos: %zu\n", postulantes[i], *votos[i]);
+        #endif
     }
 
     partido->postulantes = postulantes;
     partido->votos = votos;
     partido->largo = columnas-2;
 
-    if(DEBUG) printf("Partido: %s, %s, %s\n", partido->id, partido->nombre, partido->postulantes[0]);
+    #ifdef DEBUG
+    printf("Partido: %s, %s, %s\n", partido->id, partido->nombre, partido->postulantes[0]);
+    #endif
 
     bool insertar = lista_insertar_ultimo(lista, partido);
     if(!insertar)
@@ -138,7 +140,9 @@ bool enlistar_votante(fila_csv_t* fila, lista_t* lista, size_t columnas) {
     votante->documento_numero = obtener_columna(fila, 1);
     votante->voto_realizado = false;
 
-    if(DEBUG) printf("Padron: %s, %s\n", votante->documento_tipo, votante->documento_numero);
+    #ifdef DEBUG
+    printf("Padron: %s, %s\n", votante->documento_tipo, votante->documento_numero);
+    #endif
 
     bool insertar = lista_insertar_ultimo(lista, votante);
     if(!insertar)
